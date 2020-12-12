@@ -1,19 +1,19 @@
-# Louketo Proxy
+gatekeeper# Gatekeeper Proxy
 
-Louketo is a proxy which integrates with OpenID Connect (OIDC) Providers, it supports both access tokens in a browser cookie or bearer tokens.
+Gatekeeper is a proxy which integrates with OpenID Connect (OIDC) Providers, it supports both access tokens in a browser cookie or bearer tokens.
 
-This documentation details how to build and configure Louketo followed by details of how to use each of its features.
+This documentation details how to build and configure Gatekeeper followed by details of how to use each of its features.
 
 For further information, see the included help file which includes a
 full list of commands and switches. View the file by entering the
 following at the command line (modify the location to match where you
-install Louketo Proxy):
+install Gatekeeper Proxy):
 
 ``` bash
-    $ bin/louketo-proxy help
+    $ bin/gatekeeper-proxy help
 ```
 ## Requirements
-    
+
   - Go 1.13 or higher
   - Make
 
@@ -44,7 +44,7 @@ encryption-key: <ENCRYPTION_KEY>
 # the upstream endpoint which we should proxy request
 upstream-url: http://127.0.0.1:80
 # Returns HTTP 401 when no authentication is present, used with forward proxies.
-no-redirects: false 
+no-redirects: false
 # additional scopes to add to the default (openid+email+profile)
 scopes:
 - vpn-user
@@ -118,16 +118,16 @@ resources:
   roles:
   - client:test1
 - uri: /public/*
-# Allow access to the resource above 
+# Allow access to the resource above
   white-listed: true
 - uri: /favicon
-# Allow access to the resource above 
+# Allow access to the resource above
   white-listed: true
 - uri: /css/*
-# Allow access to the resource above 
+# Allow access to the resource above
   white-listed: true
 - uri: /img/*
-# Allow access to the resource above 
+# Allow access to the resource above
   white-listed: true
 # Adds custom headers
 headers:
@@ -139,7 +139,7 @@ Anything defined in a configuration file can also be configured using
 command line options, such as in this example.
 
 ``` bash
-bin/louketo-proxy \
+bin/gatekeeper \
     --discovery-url=https://keycloak.example.com/auth/realms/<REALM_NAME> \
     --client-id=<CLIENT_ID> \
     --client-secret=<SECRET> \
@@ -215,8 +215,8 @@ one another; you have already set up the credentials, roles, and clients
 in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
-- name: louketo-proxy
-  image: quay.io/louketo/louketo-proxy:latest
+- name: gatekeeper
+  image: docker.io/go-gatekeeper/gatekeeper:latest
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -238,7 +238,7 @@ in Keycloak, providing granular role controls over issue tokens.
 $ curl -k --proxy http://127.0.0.1:3000 https://test.projesta.svc.cluster.local
 ```
 
-On the receiver side, you could set up the Louketo Proxy
+On the receiver side, you could set up the Gatekeeper Proxy
 `--no-redirects=true` and permit this to verify and handle admission for
 you. Alternatively, the access token can found as a bearer token in the
 request.
@@ -252,7 +252,7 @@ trust, you’ll need to generate a CA, for example.
 
 ``` bash
 $ openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ca.key -out ca.pem
-$ bin/louketo-proxy \
+$ bin/gatekeeper-proxy \
   --enable-forwarding \
   --forwarding-username=USERNAME \
   --forwarding-password=PASSWORD \
@@ -448,7 +448,7 @@ token would look like this:
 
 ## Custom pages
 
-By default, Louketo Proxy will immediately redirect you
+By default, Gatekeeper Proxy will immediately redirect you
 for authentication and hand back a 403 for access denied. Most users
 will probably want to present the user with a more friendly sign-in and
 access denied page. You can pass the command line options (or via config
@@ -619,7 +619,7 @@ a counter per HTTP code.
 
 Keep in mind [browser cookie
 limits](http://browsercookielimits.squawky.net/) if you use access or
-refresh tokens in the browser cookie. Louketo Proxy divides
+refresh tokens in the browser cookie. Gatekeeper Proxy divides
 the cookie automatically if your cookie is longer than 4093 bytes. The real
 size of the cookie depends on the content of the issued access token.
 Also, encryption might add additional bytes to the cookie size. If you
@@ -634,7 +634,7 @@ users won’t be able to obtain an access token.
 ## Known Issues
 
 There is a known issue with the Keycloak server 4.6.0.Final in which
-Louketo Proxy is unable to find the *client\_id* in the *aud* claim. This
+Gatekeeper Proxy is unable to find the *client\_id* in the *aud* claim. This
 is due to the fact the *client\_id* is not in the audience anymore. The
 workaround is to add the "Audience" protocol mapper to the client with
 the audience pointed to the *client\_id*. For more information, see
