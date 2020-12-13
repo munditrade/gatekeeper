@@ -5,12 +5,12 @@ Ensure you have Golang 1.11 (or newer) and Git installed
     go version
     git --version
 
-First clone the Louketo Proxy repository:
+First clone the Gatekeeper repository:
 
     git clone https://github.com/go-gatekeeper/gatekeeper.git
     cd gatekeeper
 
-To build Louketo Proxy run:
+To build Gatekeeper run:
 
     make && make test
 
@@ -22,15 +22,15 @@ To build a distribution run:
 
 Once completed you will find distribution archives in the `release` folder.
 
-## Starting Louketo
+## Starting Gatekeeper
 
-To start Louketo Proxy during development first build as specified above, then run:
+To start Gatekeeper during development first build as specified above, then run:
 
     bin/gatekeeper
 
 ## Working with the codebase
 
-We don't currently enforce a code style in Louketo, because Go already have tools to ensure that code is properly formatted. Before submitting any pull request, please run:
+We don't currently enforce a code style in Gatekeeper, because Go already have tools to ensure that code is properly formatted. Before submitting any pull request, please run:
 
     make format && make lint
 

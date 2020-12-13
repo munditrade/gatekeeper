@@ -1,20 +1,20 @@
-# Gatekeeper Proxy
+# Gatekeeper
 
-This repository is a work in progress and contains the source code for the Gatekeeper Proxy. You should be able to see what's being planned at our [milestones page](https://github.com/go-gatekeeper/gatekeeper/milestones).
+This repository is a work in progress and contains the source code for the Gatekeeper. You should be able to see what's being planned at our [milestones page](https://github.com/go-gatekeeper/gatekeeper/milestones).
 
 ## Help and Documentation
 
-* [Gatekeeper Proxy documentation](docs/user-guide.md)
+* [Gatekeeper documentation](docs/user-guide.md)
 * [Issue Tracker](https://github.com/go-gatekeeper/gatekeeper/issues) - Issue tracker for bugs and feature requests
 
 ## Reporting an issue
 
-If you believe you have discovered a defect in Gatekeeper Proxy please open an issue in our [Issue Tracker](https://github.com/go-gatekeeper/gatekeeper/issues).
+If you believe you have discovered a defect in Gatekeeper please open an issue in our [Issue Tracker](https://github.com/go-gatekeeper/gatekeeper/issues).
 Please remember to provide a good summary, description as well as steps to reproduce the issue.
 
 ## Getting started
 
-To run Gatekeeper Proxy, please refer to our [building and working with the code base](docs/building.md) guide. Alternatively, you can use the Docker image by running:
+To run Gatekeeper, please refer to our [building and working with the code base](docs/building.md) guide. Alternatively, you can use the Docker image by running:
 
     docker run -it --rm docker.io/go-gatekeeper/gatekeeper \
       --listen 127.0.0.1:8080 \
@@ -30,7 +30,7 @@ To write tests refer to the [writing tests](docs/tests-development.md) guide.
 
 ## Contributing
 
-Before contributing to Gatekeeper Proxy please read our [contributing guidelines](CONTRIBUTING.md).
+Before contributing to Gatekeeper please read our [contributing guidelines](CONTRIBUTING.md).
 
 ## Other Keycloak Projects
 
