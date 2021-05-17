@@ -215,10 +215,13 @@ func (r *oauthProxy) oauthCallbackHandler(w http.ResponseWriter, req *http.Reque
 		}
 	}
 
-	r.log.Info("issuing access token for user",
+	r.log.Info(
+		"issuing access token for user",
 		zap.String("email", customClaims.Email),
+		zap.String("sub", stdClaims.Subject),
 		zap.String("expires", stdClaims.Expiry.Time().Format(time.RFC3339)),
-		zap.String("duration", time.Until(stdClaims.Expiry.Time()).String()))
+		zap.String("duration", time.Until(stdClaims.Expiry.Time()).String()),
+	)
 
 	// @metric a token has been issued
 	oauthTokensMetric.WithLabelValues("issued").Inc()
@@ -227,8 +230,14 @@ func (r *oauthProxy) oauthCallbackHandler(w http.ResponseWriter, req *http.Reque
 	if r.config.EnableRefreshTokens && resp.RefreshToken != "" {
 		var encrypted string
 		encrypted, err = encodeText(resp.RefreshToken, r.config.EncryptionKey)
+
 		if err != nil {
-			r.log.Error("failed to encrypt the refresh token", zap.Error(err))
+			r.log.Error(
+				"failed to encrypt the refresh token",
+				zap.Error(err),
+				zap.String("sub", stdClaims.Subject),
+				zap.String("email", customClaims.Email),
+			)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -242,7 +251,12 @@ func (r *oauthProxy) oauthCallbackHandler(w http.ResponseWriter, req *http.Reque
 		refreshToken, err := jwt.ParseSigned(resp.RefreshToken)
 
 		if err != nil {
-			r.log.Error("failed to parse refresh token", zap.Error(err))
+			r.log.Error(
+				"failed to parse refresh token",
+				zap.Error(err),
+				zap.String("sub", stdClaims.Subject),
+				zap.String("email", customClaims.Email),
+			)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -260,7 +274,12 @@ func (r *oauthProxy) oauthCallbackHandler(w http.ResponseWriter, req *http.Reque
 		switch r.useStore() {
 		case true:
 			if err = r.StoreRefreshToken(accessToken, encrypted, expiration); err != nil {
-				r.log.Warn("failed to save the refresh token in the store", zap.Error(err))
+				r.log.Warn(
+					"failed to save the refresh token in the store",
+					zap.Error(err),
+					zap.String("sub", stdClaims.Subject),
+					zap.String("email", customClaims.Email),
+				)
 			}
 		default:
 			r.dropRefreshTokenCookie(req, w, encrypted, expiration)

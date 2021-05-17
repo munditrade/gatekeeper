@@ -206,10 +206,13 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 			if r.config.SkipTokenVerification {
 				r.log.Warn("skip token verification enabled, skipping verification - TESTING ONLY")
 				if user.isExpired() {
-					r.log.Error("the session has expired and verification switch off",
+					r.log.Error(
+						"the session has expired and verification switch off",
 						zap.String("client_ip", clientIP),
 						zap.String("username", user.name),
-						zap.String("expired_on", user.expiresAt.String()))
+						zap.String("sub", user.id),
+						zap.String("expired_on", user.expiresAt.String()),
+					)
 
 					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
 					return
@@ -229,9 +232,11 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					// expired error we immediately throw an access forbidden - as there is
 					// something messed up in the token
 					if !strings.Contains(err.Error(), "token is expired") {
-						r.log.Error("access token failed verification",
+						r.log.Error(
+							"access token failed verification",
 							zap.String("client_ip", clientIP),
-							zap.Error(err))
+							zap.Error(err),
+						)
 
 						next.ServeHTTP(w, req.WithContext(r.accessForbidden(w, req)))
 						return
@@ -239,26 +244,35 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 					// step: check if we are refreshing the access tokens and if not re-auth
 					if !r.config.EnableRefreshTokens {
-						r.log.Error("session expired and access token refreshing is disabled",
+						r.log.Error(
+							"session expired and access token refreshing is disabled",
 							zap.String("client_ip", clientIP),
 							zap.String("email", user.name),
-							zap.String("expired_on", user.expiresAt.String()))
+							zap.String("sub", user.id),
+							zap.String("expired_on", user.expiresAt.String()),
+						)
 
 						next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
 						return
 					}
 
-					r.log.Info("accces token for user has expired, attemping to refresh the token",
+					r.log.Info(
+						"accces token for user has expired, attemping to refresh the token",
 						zap.String("client_ip", clientIP),
-						zap.String("email", user.email))
+						zap.String("email", user.email),
+						zap.String("sub", user.id),
+					)
 
 					// step: check if the user has refresh token
 					refresh, _, err := r.retrieveRefreshToken(req.WithContext(ctx), user)
 					if err != nil {
-						r.log.Error("unable to find a refresh token for user",
+						r.log.Error(
+							"unable to find a refresh token for user",
 							zap.String("client_ip", clientIP),
 							zap.String("email", user.email),
-							zap.Error(err))
+							zap.String("sub", user.id),
+							zap.Error(err),
+						)
 
 						next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
 						return
@@ -273,22 +287,47 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					// exp: expiration of the access token
 					// expiresIn: expiration of the ID token
 					conf := r.newOAuth2Config(r.config.RedirectionURL)
+
+					r.log.Debug(
+						"Issuing refresh token request",
+						zap.String("refresh token", refresh),
+						zap.String("email", user.email),
+						zap.String("sub", user.id),
+					)
+
 					_, newRawAccToken, newRefreshToken, accessExpiresAt, refreshExpiresIn, err := getRefreshedToken(conf, r.config, refresh)
+
 					if err != nil {
 						switch err {
 						case ErrRefreshTokenExpired:
-							r.log.Warn("refresh token has expired, cannot retrieve access token",
+							r.log.Warn(
+								"refresh token has expired, cannot retrieve access token",
 								zap.String("client_ip", clientIP),
-								zap.String("email", user.email))
+								zap.String("email", user.email),
+								zap.String("sub", user.id),
+							)
 
 							r.clearAllCookies(req.WithContext(ctx), w)
 						default:
-							r.log.Error("failed to refresh the access token", zap.Error(err))
+							r.log.Error(
+								"failed to refresh the access token",
+								zap.Error(err),
+								zap.String("email", user.email),
+								zap.String("sub", user.id),
+							)
 						}
 						next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
 
 						return
 					}
+
+					r.log.Debug(
+						"info about tokens after refreshing",
+						zap.String("new access token", newRawAccToken),
+						zap.String("new refresh token", newRefreshToken),
+						zap.String("email", user.email),
+						zap.String("sub", user.id),
+					)
 
 					accessExpiresIn := time.Until(accessExpiresAt)
 
@@ -296,22 +335,32 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					if newRefreshToken != "" {
 						refresh = newRefreshToken
 					}
+
 					if refreshExpiresIn == 0 {
 						// refresh token expiry claims not available: try to parse refresh token
 						refreshExpiresIn = r.getAccessCookieExpiration(refresh)
 					}
 
-					r.log.Info("injecting the refreshed access token cookie",
+					r.log.Info(
+						"injecting the refreshed access token cookie",
 						zap.String("client_ip", clientIP),
 						zap.String("cookie_name", r.config.CookieAccessName),
 						zap.String("email", user.email),
+						zap.String("sub", user.id),
 						zap.Duration("refresh_expires_in", refreshExpiresIn),
-						zap.Duration("expires_in", accessExpiresIn))
+						zap.Duration("expires_in", accessExpiresIn),
+					)
 
 					accessToken := newRawAccToken
+
 					if r.config.EnableEncryptedToken || r.config.ForceEncryptedCookie {
 						if accessToken, err = encodeText(accessToken, r.config.EncryptionKey); err != nil {
-							r.log.Error("unable to encode the access token", zap.Error(err))
+							r.log.Error(
+								"unable to encode the access token", zap.Error(err),
+								zap.String("email", user.email),
+								zap.String("sub", user.id),
+							)
+
 							w.WriteHeader(http.StatusInternalServerError)
 							return
 						}
@@ -321,11 +370,23 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 					// step: inject the renewed refresh token
 					if newRefreshToken != "" {
-						r.log.Debug("renew refresh cookie with new refresh token",
-							zap.Duration("refresh_expires_in", refreshExpiresIn))
+						r.log.Debug(
+							"renew refresh cookie with new refresh token",
+							zap.Duration("refresh_expires_in", refreshExpiresIn),
+							zap.String("email", user.email),
+							zap.String("sub", user.id),
+						)
+
 						encryptedRefreshToken, err := encodeText(newRefreshToken, r.config.EncryptionKey)
+
 						if err != nil {
-							r.log.Error("failed to encrypt the refresh token", zap.Error(err))
+							r.log.Error(
+								"failed to encrypt the refresh token",
+								zap.Error(err),
+								zap.String("email", user.email),
+								zap.String("sub", user.id),
+							)
+
 							w.WriteHeader(http.StatusInternalServerError)
 							return
 						}

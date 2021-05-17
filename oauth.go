@@ -76,6 +76,7 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *Config, t string) (jwt.
 	defer cancel()
 
 	start := time.Now()
+
 	tkn, err := conf.TokenSource(ctx, &oauth2.Token{RefreshToken: t}).Token()
 
 	if err != nil {
@@ -89,8 +90,13 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *Config, t string) (jwt.
 	oauthTokensMetric.WithLabelValues("renew").Inc()
 	oauthLatencyMetric.WithLabelValues("renew").Observe(taken)
 
-	refreshExpiresIn := time.Until(tkn.Expiry)
 	token, err := jwt.ParseSigned(tkn.AccessToken)
+
+	if err != nil {
+		return jwt.JSONWebToken{}, "", "", time.Time{}, time.Duration(0), err
+	}
+
+	refreshToken, err := jwt.ParseSigned(tkn.RefreshToken)
 
 	if err != nil {
 		return jwt.JSONWebToken{}, "", "", time.Time{}, time.Duration(0), err
@@ -103,6 +109,16 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *Config, t string) (jwt.
 	if err != nil {
 		return jwt.JSONWebToken{}, "", "", time.Time{}, time.Duration(0), err
 	}
+
+	refreshStdClaims := &jwt.Claims{}
+
+	err = refreshToken.UnsafeClaimsWithoutVerification(refreshStdClaims)
+
+	if err != nil {
+		return jwt.JSONWebToken{}, "", "", time.Time{}, time.Duration(0), err
+	}
+
+	refreshExpiresIn := time.Until(refreshStdClaims.Expiry.Time())
 
 	return *token, tkn.AccessToken, tkn.RefreshToken, stdClaims.Expiry.Time(), refreshExpiresIn, nil
 }
