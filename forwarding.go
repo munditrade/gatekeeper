@@ -88,6 +88,7 @@ func (r *oauthProxy) proxyMiddleware(next http.Handler) http.Handler {
 }
 
 // forwardProxyHandler is responsible for signing outbound requests
+// nolint:funlen
 func (r *oauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 	ctx := context.Background()
 
@@ -198,28 +199,61 @@ func (r *oauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 				state.login = false
 				state.refresh = resp.RefreshToken
 
-				r.log.Info("successfully retrieved access token for subject",
+				r.log.Debug(
+					"successfully retrieved access token for subject",
+					zap.String("access token", state.rawToken),
 					zap.String("subject", state.subject),
-					zap.String("expires", state.expiration.Format(time.RFC3339)))
+					zap.String("expires", state.expiration.Format(time.RFC3339)),
+				)
+
+				r.log.Info(
+					"successfully retrieved access token for subject",
+					zap.String("subject", state.subject),
+					zap.String("expires", state.expiration.Format(time.RFC3339)),
+				)
 			} else {
-				r.log.Info("access token is about to expiry",
+				r.log.Debug(
+					"access token is about to expiry",
+					zap.String("access token", state.rawToken),
+					zap.String("subject", state.subject),
+				)
+
+				r.log.Info(
+					"access token is about to expiry",
 					zap.String("subject", state.subject),
 				)
 
 				// step: if we a have a refresh token, we need to login again
 				if state.refresh != "" && r.config.ForwardingGrantType != GrantTypeClientCreds {
-					r.log.Info("attempting to refresh the access token",
+					r.log.Debug(
+						"attempting to refresh the access token",
+						zap.String("access token", state.rawToken),
+						zap.String("refresh token", state.refresh),
 						zap.String("subject", state.subject),
-						zap.String("expires", state.expiration.Format(time.RFC3339)))
+						zap.String("expires", state.expiration.Format(time.RFC3339)),
+					)
+
+					r.log.Info(
+						"attempting to refresh the access token",
+						zap.String("subject", state.subject),
+						zap.String("expires", state.expiration.Format(time.RFC3339)),
+					)
 
 					// step: attempt to refresh the access
 					token, rawToken, newRefreshToken, expiration, _, err := getRefreshedToken(conf, r.config, state.refresh)
 					state.rawToken = rawToken
+
 					if err != nil {
 						state.login = true
 						switch err {
 						case ErrRefreshTokenExpired:
-							r.log.Warn("the refresh token has expired, need to login again",
+							r.log.Debug(
+								"the refresh token has expired, need to login again",
+								zap.String("refresh token", state.refresh),
+								zap.String("subject", state.subject),
+							)
+							r.log.Warn(
+								"the refresh token has expired, need to login again",
 								zap.String("subject", state.subject),
 							)
 						default:
@@ -238,12 +272,24 @@ func (r *oauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 					}
 
 					// step: add some debugging
-					r.log.Info("successfully refreshed the access token",
+					r.log.Debug(
+						"successfully refreshed the access token",
+						zap.String("new access token", state.rawToken),
+						zap.String("refresh token", state.refresh),
 						zap.String("subject", state.subject),
-						zap.String("expires", state.expiration.Format(time.RFC3339)))
+						zap.String("expires", state.expiration.Format(time.RFC3339)),
+					)
+
+					r.log.Info(
+						"successfully refreshed the access token",
+						zap.String("subject", state.subject),
+						zap.String("expires", state.expiration.Format(time.RFC3339)),
+					)
 				} else {
-					r.log.Info("session does not support refresh token, acquiring new token",
-						zap.String("subject", state.subject))
+					r.log.Info(
+						"session does not support refresh token, acquiring new token",
+						zap.String("subject", state.subject),
+					)
 
 					// we don't have a refresh token, we must perform a login again
 					state.wait = false
@@ -255,9 +301,11 @@ func (r *oauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 			if state.wait {
 				// set the expiration of the access token within a random 85% of actual expiration
 				duration := getWithin(state.expiration, 0.85)
-				r.log.Info("waiting for expiration of access token",
+				r.log.Info(
+					"waiting for expiration of access token",
 					zap.String("token_expiration", state.expiration.Format(time.RFC3339)),
-					zap.String("renewal_duration", duration.String()))
+					zap.String("renewal_duration", duration.String()),
+				)
 
 				<-time.After(duration)
 			}

@@ -215,6 +215,15 @@ func (r *oauthProxy) oauthCallbackHandler(w http.ResponseWriter, req *http.Reque
 		}
 	}
 
+	r.log.Debug(
+		"issuing access token for user",
+		zap.String("access token", accessToken),
+		zap.String("email", customClaims.Email),
+		zap.String("sub", stdClaims.Subject),
+		zap.String("expires", stdClaims.Expiry.Time().Format(time.RFC3339)),
+		zap.String("duration", time.Until(stdClaims.Expiry.Time()).String()),
+	)
+
 	r.log.Info(
 		"issuing access token for user",
 		zap.String("email", customClaims.Email),

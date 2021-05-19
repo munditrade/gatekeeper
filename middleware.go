@@ -291,6 +291,7 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 					r.log.Debug(
 						"Issuing refresh token request",
+						zap.String("current access token", user.rawToken),
 						zap.String("refresh token", refresh),
 						zap.String("email", user.email),
 						zap.String("sub", user.id),
@@ -310,6 +311,13 @@ func (r *oauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 							r.clearAllCookies(req.WithContext(ctx), w)
 						default:
+							r.log.Debug(
+								"failed to refresh the access token",
+								zap.Error(err),
+								zap.String("access token", user.rawToken),
+								zap.String("email", user.email),
+								zap.String("sub", user.id),
+							)
 							r.log.Error(
 								"failed to refresh the access token",
 								zap.Error(err),
