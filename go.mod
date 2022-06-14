@@ -1,6 +1,7 @@
 module github.com/gogatekeeper/gatekeeper
 
 require (
+	github.com/Nerzal/gocloak/v11 v11.0.2
 	github.com/PuerkitoBio/purell v1.1.2-0.20201208131035-5a810c9252c4
 	github.com/alicebob/miniredis/v2 v2.14.5
 	github.com/armon/go-proxyproto v0.0.0-20200108142055-f0b8253b1507
@@ -31,7 +32,6 @@ require (
 
 require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
-	github.com/Nerzal/gocloak/v11 v11.0.2 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

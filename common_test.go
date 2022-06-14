@@ -80,6 +80,7 @@ type DefaultTestTokenClaims struct {
 	Item1             []string             `json:"item1"`
 	Item2             []string             `json:"item2"`
 	Item3             []string             `json:"item3"`
+	Authorization     Permissions          `json:"authorization"`
 }
 
 var defTestTokenClaims = DefaultTestTokenClaims{
@@ -111,6 +112,15 @@ var defTestTokenClaims = DefaultTestTokenClaims{
 	Item1: []string{"default"},
 	Item2: []string{"default"},
 	Item3: []string{"default"},
+	Authorization: Permissions{
+		Permissions: []Permission{
+			{
+				Scopes:       []string{"test"},
+				ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
+				ResourceName: "test-resource",
+			},
+		},
+	},
 }
 
 const (
@@ -140,6 +150,7 @@ type fakeRequest struct {
 	SkipIssuerCheck               bool
 	RequestCA                     string
 	TokenClaims                   map[string]interface{}
+	TokenAuthorization            *Permissions
 	URI                           string
 	URL                           string
 	Username                      string
@@ -183,6 +194,12 @@ func newFakeProxy(c *Config, authConfig *fakeAuthConfig) *fakeProxy {
 	c.DiscoveryURL = auth.getLocation()
 	c.Verbose = true
 	c.DisableAllLogging = true
+	err := c.update()
+
+	if err != nil {
+		panic("failed to create fake proxy service, error: " + err.Error())
+	}
+
 	proxy, err := newProxy(c)
 
 	if err != nil {
@@ -330,6 +347,10 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 
 			if c.Expires > 0 || c.Expires < 0 {
 				token.setExpiration(time.Now().Add(c.Expires))
+			}
+
+			if c.TokenAuthorization != nil {
+				token.claims.Authorization = *c.TokenAuthorization
 			}
 
 			if c.NotSigned {
@@ -666,6 +687,11 @@ func newTestProxyService(config *Config) (*oauthProxy, *fakeAuthServer, string) 
 	config.RevocationEndpoint = auth.getRevocationURL()
 	config.Verbose = false
 	config.EnableLogging = false
+	err := config.update()
+
+	if err != nil {
+		panic("failed to create proxy service, error: " + err.Error())
+	}
 
 	proxy, err := newProxy(config)
 	if err != nil {
@@ -1095,6 +1121,9 @@ func newFakeAuthServer(config *fakeAuthConfig) *fakeAuthServer {
 	r.Post("/auth/realms/hod-test/protocol/openid-connect/logout", service.logoutHandler)
 	r.Post("/auth/realms/hod-test/protocol/openid-connect/revoke", service.revocationHandler)
 	r.Post("/auth/realms/hod-test/protocol/openid-connect/token", service.tokenHandler)
+	r.Get("/auth/realms/hod-test/authz/protection/resource_set", service.ResourcesHandler)
+	r.Get("/auth/realms/hod-test/authz/protection/resource_set/{id}", service.ResourceHandler)
+	r.Post("/auth/realms/hod-test/authz/protection/permission", service.PermissionTicketHandler)
 
 	if config.EnableTLS {
 		service.server = httptest.NewTLSServer(r)
@@ -1280,8 +1309,14 @@ func (r *fakeAuthServer) tokenHandler(w http.ResponseWriter, req *http.Request) 
 		clientSecret := req.FormValue("client_secret")
 
 		if clientID == "" || clientSecret == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
+			u, p, ok := req.BasicAuth()
+			clientID = u
+			clientSecret = p
+
+			if clientID == "" || clientSecret == "" || !ok {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 		}
 
 		if clientID == validUsername && clientSecret == validPassword {
@@ -1296,7 +1331,7 @@ func (r *fakeAuthServer) tokenHandler(w http.ResponseWriter, req *http.Request) 
 
 		renderJSON(http.StatusUnauthorized, w, req, map[string]string{
 			"error":             "invalid_grant",
-			"error_description": "invalid user credentials",
+			"error_description": "invalid client credentials",
 		})
 	case GrantTypeRefreshToken:
 		oldRefreshToken, err := jwt.ParseSigned(req.FormValue("refresh_token"))
@@ -1352,6 +1387,65 @@ func (r *fakeAuthServer) tokenHandler(w http.ResponseWriter, req *http.Request) 
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
+}
+
+func (r *fakeAuthServer) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
+	response := []string{"6ef1b62e-0fd4-47f2-81fc-eead97a01c22"}
+	renderJSON(http.StatusOK, w, req, response)
+}
+
+func (r *fakeAuthServer) ResourceHandler(w http.ResponseWriter, req *http.Request) {
+	type Resource struct {
+		Name               string              `json:"name"`
+		Type               string              `json:"type"`
+		Owner              struct{ ID string } `json:"owner"`
+		OwnerManagedAccess bool                `json:"ownerManagedAccess"`
+		Attributes         struct{}            `json:"attributes"`
+		ID                 string              `json:"_id"`
+		URIS               []string            `json:"uris"`
+		ResourceScopes     []struct {
+			Name string `json:"name"`
+		} `json:"resource_scopes"`
+		Scopes []struct {
+			Name string `json:"name"`
+		} `json:"scopes"`
+	}
+
+	response := Resource{
+		Name:               "Default Resource",
+		Type:               "urn:test-client:resources:default",
+		Owner:              struct{ ID string }{ID: "6ef1b62e-0fd4-47f2-81fc-eead97a01c22"},
+		OwnerManagedAccess: false,
+		Attributes:         struct{}{},
+		ID:                 "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
+		URIS:               []string{"/*"},
+		ResourceScopes: []struct {
+			Name string `json:"name"`
+		}{{Name: "test"}},
+		Scopes: []struct {
+			Name string `json:"name"`
+		}{{Name: "test"}},
+	}
+	renderJSON(http.StatusOK, w, req, response)
+}
+
+func (r *fakeAuthServer) PermissionTicketHandler(w http.ResponseWriter, req *http.Request) {
+	token := newTestToken(r.getLocation())
+	acc, err := token.getToken()
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	type Ticket struct {
+		Ticket string `json:"ticket"`
+	}
+
+	response := Ticket{
+		Ticket: acc,
+	}
+	renderJSON(http.StatusOK, w, req, response)
 }
 
 func getRandomString(n int) (string, error) {

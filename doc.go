@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -248,6 +249,11 @@ type Config struct {
 	// EnableCompression enables gzip compression for response
 	EnableCompression bool `json:"enable-compression" yaml:"enable-compression" usage:"enable gzip compression for response" env:"ENABLE_COMPRESSION"`
 
+	EnableUma          bool          `json:"enable-uma" yaml:"enable-uma" usage:"enable uma authorization" env:"ENABLE_UMA"`
+	PatRetryCount      int           `json:"pat-retry-count" yaml:"pat-retry-count" usage:"number of retries to get PAT" env:"PAT_RETRY_COUNT"`
+	PatRetryInterval   time.Duration `json:"pat-retry-interval" yaml:"pat-retry-interval" usage:"interval between retries to get PAT" env:"PAT_RETRY_INTERVAL"`
+	PatRefreshInterval time.Duration `json:"pat-refresh-interval" yaml:"pat-refresh-interval" usage:"interval between requesting new PAT" env:"PAT_REFRESH_INTERVAL"`
+
 	// AccessTokenDuration is default duration applied to the access token cookie
 	AccessTokenDuration time.Duration `json:"access-token-duration" yaml:"access-token-duration" usage:"fallback cookie duration for the access token when using refresh tokens" env:"ACCESS_TOKEN_DURATION"`
 	// CookieDomain is a list of domains the cookie is available to
@@ -381,6 +387,9 @@ type Config struct {
 
 	// DisableAllLogging indicates no logging at all
 	DisableAllLogging bool `json:"disable-all-logging" yaml:"disable-all-logging" usage:"disables all logging to stdout and stderr" env:"DISABLE_ALL_LOGGING"`
+	// this is non-configurable field, derived from discoveryurl at initialization
+	Realm        string
+	DiscoveryURI *url.URL
 }
 
 // getVersion returns the proxy version
@@ -427,6 +436,16 @@ type reverseProxy interface {
 	ServeHTTP(rw http.ResponseWriter, req *http.Request)
 }
 
+type Permission struct {
+	Scopes       []string `json:"scopes"`
+	ResourceID   string   `json:"rsid"`
+	ResourceName string   `json:"rsname"`
+}
+
+type Permissions struct {
+	Permissions []Permission `json:"permissions"`
+}
+
 // userContext holds the information extracted the token
 type userContext struct {
 	// the id of the user
@@ -451,6 +470,8 @@ type userContext struct {
 	rawToken string
 	// claims
 	claims map[string]interface{}
+	// permissions
+	permissions Permissions
 }
 
 // tokenResponse

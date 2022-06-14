@@ -41,6 +41,7 @@ func extractIdentity(token *jwt.JSONWebToken) (*userContext, error) {
 		FamilyName     string                 `json:"family_name"`
 		GivenName      string                 `json:"given_name"`
 		Username       string                 `json:"username"`
+		Authorization  Permissions            `json:"authorization"`
 	}
 
 	customClaims := custClaims{}
@@ -91,6 +92,7 @@ func extractIdentity(token *jwt.JSONWebToken) (*userContext, error) {
 		preferredName: preferredName,
 		roles:         roleList,
 		claims:        jsonMap,
+		permissions:   customClaims.Authorization,
 	}, nil
 }
 

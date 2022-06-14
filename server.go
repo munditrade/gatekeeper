@@ -65,6 +65,7 @@ type oauthProxy struct {
 	store          storage
 	templates      *template.Template
 	upstream       reverseProxy
+	pat            *gocloak.JWT
 }
 
 func init() {
@@ -81,6 +82,12 @@ func init() {
 func newProxy(config *Config) (*oauthProxy, error) {
 	// create the service logger
 	log, err := createLogger(config)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = config.update()
 
 	if err != nil {
 		return nil, err
@@ -127,6 +134,12 @@ func newProxy(config *Config) (*oauthProxy, error) {
 	}
 
 	svc.log.Info("successfully retrieved openid configuration from the discovery")
+
+	if config.EnableUma {
+		patDone := make(chan bool)
+		go svc.getPAT(patDone)
+		<-patDone
+	}
 
 	if config.SkipTokenVerification {
 		log.Warn(
@@ -386,10 +399,22 @@ func (r *oauthProxy) createReverseProxy() error {
 			zap.String("resource", x.String()),
 		)
 
-		e := engine.With(
+		middlewares := []func(http.Handler) http.Handler{
 			r.authenticationMiddleware(),
 			r.admissionMiddleware(x),
-			r.identityHeadersMiddleware(r.config.AddClaims))
+			r.identityHeadersMiddleware(r.config.AddClaims),
+		}
+
+		if r.config.EnableUma {
+			middlewares = []func(http.Handler) http.Handler{
+				r.authenticationMiddleware(),
+				r.authorizationMiddleware(),
+				r.admissionMiddleware(x),
+				r.identityHeadersMiddleware(r.config.AddClaims),
+			}
+		}
+
+		e := engine.With(middlewares...)
 
 		for _, m := range x.Methods {
 			if !x.WhiteListed {
@@ -970,13 +995,12 @@ func (r *oauthProxy) createTemplates() error {
 // newOpenIDProvider initializes the openID configuration, note: the redirection url is deliberately left blank
 // in order to retrieve it from the host header on request
 func (r *oauthProxy) newOpenIDProvider() (*oidc3.Provider, gocloak.GoCloak, error) {
-	// step: fix up the url if required, the underlining lib will add the .well-known/openid-configuration to the discovery url for us.
-	r.config.DiscoveryURL = strings.TrimSuffix(
-		r.config.DiscoveryURL,
-		"/.well-known/openid-configuration",
+	host := fmt.Sprintf(
+		"%s://%s",
+		r.config.DiscoveryURI.Scheme,
+		r.config.DiscoveryURI.Host,
 	)
-
-	client := gocloak.NewClient(r.config.DiscoveryURL)
+	client := gocloak.NewClient(host)
 	restyClient := client.RestyClient()
 	restyClient.SetDebug(r.config.Verbose)
 	restyClient.SetTimeout(r.config.OpenIDProviderTimeout)
@@ -1010,4 +1034,54 @@ func (r *oauthProxy) newOpenIDProvider() (*oidc3.Provider, gocloak.GoCloak, erro
 // Render implements the echo Render interface
 func (r *oauthProxy) Render(w io.Writer, name string, data interface{}) error {
 	return r.templates.ExecuteTemplate(w, name, data)
+}
+
+func (r *oauthProxy) getPAT(done chan bool) {
+	retry := 0
+
+	for {
+		if retry > 0 {
+			r.log.Info(
+				"retrying fetching PAT token",
+				zap.Int("retry", retry),
+			)
+		}
+
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			r.config.OpenIDProviderTimeout,
+		)
+		clientID := r.config.ClientID
+		clientSecret := r.config.ClientSecret
+
+		token, err := r.idpClient.LoginClient(
+			ctx,
+			clientID,
+			clientSecret,
+			r.config.Realm,
+		)
+
+		if err != nil {
+			retry++
+			r.log.Error(
+				"problem getting PAT token",
+				zap.Error(err),
+			)
+
+			if retry >= r.config.PatRetryCount {
+				cancel()
+				os.Exit(10)
+			}
+
+			time.Sleep(r.config.PatRetryInterval)
+			continue
+		}
+
+		r.pat = token
+
+		done <- true
+
+		retry = 0
+		time.Sleep(r.config.PatRefreshInterval)
+	}
 }

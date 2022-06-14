@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Nerzal/gocloak/v11"
 	"go.uber.org/zap"
 	"gopkg.in/square/go-jose.v2/jwt"
 )
@@ -122,7 +123,102 @@ func (r *oauthProxy) redirectToURL(url string, w http.ResponseWriter, req *http.
 
 // redirectToAuthorization redirects the user to authorization handler
 func (r *oauthProxy) redirectToAuthorization(w http.ResponseWriter, req *http.Request) context.Context {
-	if r.config.NoRedirects {
+	if r.config.NoRedirects && !r.config.EnableUma {
+		w.WriteHeader(http.StatusUnauthorized)
+		return r.revokeProxy(w, req)
+	}
+
+	if r.config.EnableUma {
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			r.config.OpenIDProviderTimeout,
+		)
+
+		defer cancel()
+
+		matchingURI := true
+
+		resourceParam := gocloak.GetResourceParams{
+			URI:         &req.URL.Path,
+			MatchingURI: &matchingURI,
+		}
+
+		if r.pat == nil {
+			r.log.Info(
+				"pat token not yet retrieved from IDP",
+			)
+			w.WriteHeader(http.StatusUnauthorized)
+			return r.revokeProxy(w, req)
+		}
+
+		resources, err := r.idpClient.GetResourcesClient(
+			ctx,
+			r.pat.AccessToken,
+			r.config.Realm,
+			resourceParam,
+		)
+
+		if err != nil {
+			r.log.Error(
+				"problem getting resources for path",
+				zap.String("path", req.URL.Path),
+				zap.Error(err),
+			)
+			w.WriteHeader(http.StatusUnauthorized)
+			return r.revokeProxy(w, req)
+		}
+
+		resourceID := resources[0].ID
+		resourceScopes := make([]string, 0)
+
+		if len(*resources[0].ResourceScopes) == 0 {
+			r.log.Error(
+				"missingg scopes for resource in IDP provider",
+				zap.String("resourceID", *resourceID),
+			)
+			w.WriteHeader(http.StatusUnauthorized)
+			return r.revokeProxy(w, req)
+		}
+
+		for _, scope := range *resources[0].ResourceScopes {
+			resourceScopes = append(resourceScopes, *scope.Name)
+		}
+
+		permissions := []gocloak.CreatePermissionTicketParams{
+			{
+				ResourceID:     resourceID,
+				ResourceScopes: &resourceScopes,
+			},
+		}
+
+		permTicket, err := r.idpClient.CreatePermissionTicket(
+			ctx,
+			r.pat.AccessToken,
+			r.config.Realm,
+			permissions,
+		)
+
+		if err != nil {
+			r.log.Error(
+				"problem getting permission ticket for resourceId",
+				zap.String("resourceID", *resourceID),
+				zap.Error(err),
+			)
+			w.WriteHeader(http.StatusUnauthorized)
+			return r.revokeProxy(w, req)
+		}
+
+		permHeader := fmt.Sprintf(
+			`realm="%s", as_uri="%s", ticket="%s"`,
+			r.config.Realm,
+			r.config.DiscoveryURI.Host,
+			*permTicket.Ticket,
+		)
+
+		w.Header().Add(
+			"WWW-Authenticate",
+			permHeader,
+		)
 		w.WriteHeader(http.StatusUnauthorized)
 		return r.revokeProxy(w, req)
 	}

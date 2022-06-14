@@ -76,6 +76,9 @@ func newDefaultConfig() *Config {
 		UpstreamTimeout:               10 * time.Second,
 		UseLetsEncrypt:                false,
 		ForwardingGrantType:           GrantTypeUserCreds,
+		PatRetryCount:                 5,
+		PatRetryInterval:              10 * time.Second,
+		PatRefreshInterval:            33 * time.Second,
 	}
 }
 
@@ -86,6 +89,21 @@ func (r *Config) WithOAuthURI(uri string) string {
 	}
 
 	return fmt.Sprintf("%s/%s", r.OAuthURI, uri)
+}
+
+func (r *Config) update() error {
+	updateRegistry := []func() error{
+		r.updateDiscoveryURI,
+		r.updateRealm,
+	}
+
+	for _, updateFunc := range updateRegistry {
+		if err := updateFunc(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // isValid validates if the config is valid
@@ -323,6 +341,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 	if !r.EnableForwarding {
 		validationRegistry := []func() error{
 			r.isUpstreamValid,
+			r.isEnableUmaValid,
 			r.isTokenVerificationSettingsValid,
 			r.isResourceValid,
 			r.isMatchClaimValid,
@@ -533,5 +552,50 @@ func (r *Config) isMatchClaimValid() error {
 		}
 	}
 
+	return nil
+}
+
+func (r *Config) isEnableUmaValid() error {
+	if r.EnableUma {
+		if r.ClientID == "" || r.ClientSecret == "" {
+			return errors.New(
+				"enable uma requires client credentials",
+			)
+		}
+	}
+	return nil
+}
+
+func (r *Config) updateDiscoveryURI() error {
+	// step: fix up the url if required, the underlining lib will add
+	// the .well-known/openid-configuration to the discovery url for us.
+	r.DiscoveryURL = strings.TrimSuffix(
+		r.DiscoveryURL,
+		"/.well-known/openid-configuration",
+	)
+
+	u, err := url.ParseRequestURI(r.DiscoveryURL)
+
+	if err != nil {
+		return fmt.Errorf(
+			"failed to parse discovery url: %w",
+			err,
+		)
+	}
+
+	r.DiscoveryURI = u
+
+	return nil
+}
+
+func (r *Config) updateRealm() error {
+	path := strings.Split(r.DiscoveryURI.Path, "/")
+
+	if len(path) != 4 {
+		return fmt.Errorf("missing realm in discovery url?")
+	}
+
+	realm := path[len(path)-1]
+	r.Realm = realm
 	return nil
 }

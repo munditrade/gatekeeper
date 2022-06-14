@@ -1831,3 +1831,175 @@ func TestGzipCompression(t *testing.T) {
 		)
 	}
 }
+
+func TestEnableUma(t *testing.T) {
+	cfg := newFakeKeycloakConfig()
+
+	requests := []struct {
+		Name              string
+		ProxySettings     func(c *Config)
+		ExecutionSettings []fakeRequest
+	}{
+		{
+			Name: "TestUmaNoToken",
+			ProxySettings: func(c *Config) {
+				c.EnableUma = true
+				c.EnableDefaultDeny = true
+				c.ClientID = validUsername
+				c.ClientSecret = validPassword
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/test",
+					ExpectedProxy: false,
+					ExpectedCode:  http.StatusUnauthorized,
+					ExpectedContent: func(body string, testNum int) {
+						assert.Equal(t, "", body)
+					},
+					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *Config, string){
+						"WWW-Authenticate": func(t *testing.T, c *Config, value string) {
+							assert.Contains(t, "ticket", value)
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "TestUmaTokenWithoutAuthz",
+			ProxySettings: func(c *Config) {
+				c.EnableUma = true
+				c.EnableDefaultDeny = true
+				c.ClientID = validUsername
+				c.ClientSecret = validPassword
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:                "/test",
+					ExpectedProxy:      false,
+					HasToken:           true,
+					ExpectedCode:       http.StatusUnauthorized,
+					TokenAuthorization: &Permissions{},
+					ExpectedContent: func(body string, testNum int) {
+						assert.Equal(t, "", body)
+					},
+					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *Config, string){
+						"WWW-Authenticate": func(t *testing.T, c *Config, value string) {
+							assert.Contains(t, "ticket", value)
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "TestUmaTokenWithoutResourceId",
+			ProxySettings: func(c *Config) {
+				c.EnableUma = true
+				c.EnableDefaultDeny = true
+				c.ClientID = validUsername
+				c.ClientSecret = validPassword
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/test",
+					ExpectedProxy: false,
+					HasToken:      true,
+					ExpectedCode:  http.StatusUnauthorized,
+					TokenAuthorization: &Permissions{
+						Permissions: []Permission{
+							{
+								Scopes:       []string{"test"},
+								ResourceID:   "",
+								ResourceName: "some",
+							},
+						},
+					},
+					ExpectedContent: func(body string, testNum int) {
+						assert.Equal(t, "", body)
+					},
+					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *Config, string){
+						"WWW-Authenticate": func(t *testing.T, c *Config, value string) {
+							assert.Contains(t, "ticket", value)
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "TestUmaTokenWithoutScope",
+			ProxySettings: func(c *Config) {
+				c.EnableUma = true
+				c.EnableDefaultDeny = true
+				c.ClientID = validUsername
+				c.ClientSecret = validPassword
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/test",
+					ExpectedProxy: false,
+					HasToken:      true,
+					ExpectedCode:  http.StatusUnauthorized,
+					TokenAuthorization: &Permissions{
+						Permissions: []Permission{
+							{
+								Scopes:       []string{},
+								ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
+								ResourceName: "some",
+							},
+						},
+					},
+					ExpectedContent: func(body string, testNum int) {
+						assert.Equal(t, "", body)
+					},
+					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *Config, string){
+						"WWW-Authenticate": func(t *testing.T, c *Config, value string) {
+							assert.Contains(t, "ticket", value)
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "TestUmaOK",
+			ProxySettings: func(c *Config) {
+				c.EnableUma = true
+				c.EnableDefaultDeny = true
+				c.ClientID = validUsername
+				c.ClientSecret = validPassword
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:           "/test",
+					ExpectedProxy: true,
+					HasToken:      true,
+					ExpectedCode:  http.StatusOK,
+					TokenAuthorization: &Permissions{
+						Permissions: []Permission{
+							{
+								Scopes:       []string{"test"},
+								ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
+								ResourceName: "some",
+							},
+						},
+					},
+					ExpectedContent: func(body string, testNum int) {
+						assert.Contains(t, body, "test")
+						assert.Contains(t, body, "method")
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range requests {
+		testCase := testCase
+		c := cfg
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				testCase.ProxySettings(c)
+				p := newFakeProxy(c, &fakeAuthConfig{})
+				p.RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
+}

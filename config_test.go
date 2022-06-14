@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net/url"
 	"os"
 	"testing"
 )
@@ -1767,6 +1768,147 @@ func TestIsMatchClaimValid(t *testing.T) {
 			testCase.Name,
 			func(t *testing.T) {
 				err := testCase.Config.isMatchClaimValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestEnableUmaValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidEnableUma",
+			Config: &Config{
+				EnableUma:    true,
+				ClientID:     "test",
+				ClientSecret: "test",
+			},
+			Valid: true,
+		},
+		{
+			Name: "MissingClientID",
+			Config: &Config{
+				EnableUma:    true,
+				ClientID:     "",
+				ClientSecret: "test",
+			},
+			Valid: false,
+		},
+		{
+			Name: "MissingClientSecret",
+			Config: &Config{
+				EnableUma:    true,
+				ClientID:     "test",
+				ClientSecret: "",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isEnableUmaValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestUpdateDiscoveryURI(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "OK",
+			Config: &Config{
+				DiscoveryURL: "http://127.0.0.1:8081/auth/realms/test/.well-known/openid-configuration",
+			},
+			Valid: true,
+		},
+		{
+			Name: "InValidDiscoveryURL",
+			Config: &Config{
+				DiscoveryURL: "://127.0.0.1:8081/auth/realms/test/.well-known/openid-configuration",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.updateDiscoveryURI()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
+
+func TestUpdateRealm(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "OK",
+			Config: &Config{
+				DiscoveryURI: &url.URL{
+					Scheme: "http",
+					Host:   "127.0.0.1",
+					Path:   "/auth/realms/test",
+				},
+			},
+			Valid: true,
+		},
+		{
+			Name: "InValidDiscoveryURL",
+			Config: &Config{
+				DiscoveryURI: &url.URL{
+					Scheme: "http",
+					Host:   "127.0.0.1",
+					Path:   "/auth/realms",
+				},
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.updateRealm()
 				if err != nil && testCase.Valid {
 					t.Fatalf("Expected test not to fail")
 				}
