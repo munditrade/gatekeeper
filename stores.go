@@ -18,10 +18,31 @@ package main
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+type AuthzDecision int
+
+const (
+	UndefinedAuthz AuthzDecision = iota
+	AllowedAuthz   AuthzDecision = iota
+	DeniedAuthz    AuthzDecision = iota
+)
+
+func (decision AuthzDecision) String() string {
+	switch decision {
+	case AllowedAuthz:
+		return strconv.Itoa(int(AllowedAuthz))
+	case DeniedAuthz:
+		return strconv.Itoa(int(DeniedAuthz))
+	case UndefinedAuthz:
+		return ""
+	}
+	return strconv.Itoa(int(DeniedAuthz))
+}
 
 // createStorage creates the store client for use
 func createStorage(location string) (storage, error) {
@@ -78,6 +99,53 @@ func (r *oauthProxy) DeleteRefreshToken(token string) error {
 	}
 
 	return nil
+}
+
+// StoreAuthz
+func (r *oauthProxy) StoreAuthz(token string, url *url.URL, value AuthzDecision, expiration time.Duration) error {
+	if len(token) == 0 {
+		return fmt.Errorf("token of zero length")
+	}
+
+	tokenHash := getHashKey(token)
+	pathHash := getHashKey(url.Path)
+	hash := fmt.Sprintf("%s%s", pathHash, tokenHash)
+	return r.store.Set(hash, value.String(), expiration)
+}
+
+// Get retrieves a authz decision from store
+func (r *oauthProxy) GetAuthz(token string, url *url.URL) (AuthzDecision, error) {
+	if len(token) == 0 {
+		return UndefinedAuthz, ErrZeroLengthToken
+	}
+
+	tokenHash := getHashKey(token)
+	pathHash := getHashKey(url.Path)
+	hash := fmt.Sprintf("%s%s", pathHash, tokenHash)
+
+	exists, err := r.store.Exists(hash)
+
+	if err != nil {
+		return UndefinedAuthz, err
+	}
+
+	if !exists {
+		return UndefinedAuthz, ErrNoAuthzFound
+	}
+
+	val, err := r.store.Get(hash)
+
+	if err != nil {
+		return UndefinedAuthz, err
+	}
+
+	decision, err := strconv.Atoi(val)
+
+	if err != nil {
+		return UndefinedAuthz, err
+	}
+
+	return AuthzDecision(decision), nil
 }
 
 // Close is used to close off any resources

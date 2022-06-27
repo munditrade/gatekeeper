@@ -118,6 +118,10 @@ var (
 	ErrSessionNotFound = errors.New("authentication session not found")
 	// ErrNoSessionStateFound means there was not persist state
 	ErrNoSessionStateFound = errors.New("no session state found")
+	// ErrZeroLengthToken token has zero length
+	ErrZeroLengthToken = errors.New("token has zero length")
+	// ErrNoAuthzFound means there is not authz or it expired
+	ErrNoAuthzFound = errors.New("no authz found")
 	// ErrInvalidSession the session is invalid
 	ErrInvalidSession = errors.New("invalid session identifier")
 	// ErrRefreshTokenExpired indicates the refresh token as expired
@@ -424,6 +428,8 @@ type storage interface {
 	Set(string, string, time.Duration) error
 	// Get retrieves a token from the store
 	Get(string) (string, error)
+	// Exists checks if key exists in store
+	Exists(string) (bool, error)
 	// Delete removes a key from the store
 	Delete(string) error
 	// Close is used to close off any resources

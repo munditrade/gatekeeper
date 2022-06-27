@@ -22,6 +22,8 @@ import (
 	redis "gopkg.in/redis.v4"
 )
 
+var _ storage = (*redisStore)(nil)
+
 type redisStore struct {
 	client *redis.Client
 }
@@ -53,6 +55,16 @@ func (r redisStore) Set(key, value string, expiration time.Duration) error {
 	}
 
 	return nil
+}
+
+// Checks if key exists in store
+func (r redisStore) Exists(key string) (bool, error) {
+	result := r.client.Exists(key)
+	if result.Err() != nil {
+		return false, result.Err()
+	}
+
+	return result.Val(), nil
 }
 
 // Get retrieves a token from the store

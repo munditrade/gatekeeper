@@ -458,96 +458,163 @@ func (r *oauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			}
 
 			user := scope.Identity
+			noAuthz := false
 
-			if len(user.permissions.Permissions) == 0 {
-				r.log.Info(
-					"permissions not found in token, " +
-						"redirecting for authorization",
-				)
+			if r.useStore() {
+				decision, err := r.GetAuthz(user.rawToken, req.URL)
+				noAuthz = err == ErrNoAuthzFound
 
-				next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
-				return
-			}
+				if err != nil && !noAuthz {
+					r.log.Error(
+						"problem getting authz decision from store",
+					)
 
-			resctx, cancel := context.WithTimeout(
-				context.Background(),
-				r.config.OpenIDProviderTimeout,
-			)
+					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
+					return
+				}
 
-			defer cancel()
+				if decision == DeniedAuthz {
+					r.log.Info(
+						"authz denied from cache",
+					)
 
-			matchingURI := true
-
-			resourceParam := gocloak.GetResourceParams{
-				URI:         &req.URL.Path,
-				MatchingURI: &matchingURI,
-			}
-
-			r.pat.m.Lock()
-			token := r.pat.Token.AccessToken
-			r.pat.m.Unlock()
-
-			resources, err := r.idpClient.GetResourcesClient(
-				resctx,
-				token,
-				r.config.Realm,
-				resourceParam,
-			)
-
-			if err != nil {
-				r.log.Info(
-					"problem getting resource from IDP, " +
-						"redirecting for authorization",
-				)
-
-				next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
-				return
-			}
-
-			if len(resources) == 0 {
-				r.log.Info(
-					"seems there is no resource in IDP matching incoming URI path",
-				)
-				w.WriteHeader(http.StatusUnauthorized)
-				next.ServeHTTP(w, req.WithContext(r.revokeProxy(w, req)))
-				return
-			}
-
-			resourceID := resources[0].ID
-
-			if *resourceID != user.permissions.Permissions[0].ResourceID {
-				r.log.Info(
-					"token resource id does not match IDP resource " +
-						"id for path, redirecting for authorization",
-				)
-
-				next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
-				return
-			}
-
-			inter := make([]bool, 0)
-			permScopes := make(map[string]bool)
-
-			for _, scope := range *resources[0].ResourceScopes {
-				permScopes[*scope.Name] = true
-			}
-
-			for _, scope := range user.permissions.Permissions[0].Scopes {
-				if permScopes[scope] {
-					inter = append(inter, true)
+					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
+					return
 				}
 			}
 
-			if len(inter) == 0 {
-				r.log.Info(
-					"token scopes does not match with IDP " +
-						"resource scopes, redirecting for authorization",
+			if !r.useStore() || noAuthz {
+				if len(user.permissions.Permissions) == 0 {
+					r.log.Info(
+						"permissions not found in token, " +
+							"redirecting for authorization",
+					)
+
+					if noAuthz {
+						r.StoreAuthz(
+							user.rawToken,
+							req.URL,
+							DeniedAuthz,
+							time.Until(user.expiresAt),
+						)
+					}
+					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
+					return
+				}
+
+				resctx, cancel := context.WithTimeout(
+					context.Background(),
+					r.config.OpenIDProviderTimeout,
 				)
 
-				next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
-				return
+				defer cancel()
+
+				matchingURI := true
+
+				resourceParam := gocloak.GetResourceParams{
+					URI:         &req.URL.Path,
+					MatchingURI: &matchingURI,
+				}
+
+				r.pat.m.Lock()
+				token := r.pat.Token.AccessToken
+				r.pat.m.Unlock()
+
+				resources, err := r.idpClient.GetResourcesClient(
+					resctx,
+					token,
+					r.config.Realm,
+					resourceParam,
+				)
+
+				if err != nil {
+					r.log.Error(
+						"problem getting resource from IDP, " +
+							"redirecting for authorization",
+					)
+
+					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
+					return
+				}
+
+				if len(resources) == 0 {
+					r.log.Info(
+						"seems there is no resource in IDP matching incoming URI path",
+					)
+
+					if noAuthz {
+						r.StoreAuthz(
+							user.rawToken,
+							req.URL,
+							DeniedAuthz,
+							time.Until(user.expiresAt),
+						)
+					}
+					w.WriteHeader(http.StatusUnauthorized)
+					next.ServeHTTP(w, req.WithContext(r.revokeProxy(w, req)))
+					return
+				}
+
+				resourceID := resources[0].ID
+
+				if *resourceID != user.permissions.Permissions[0].ResourceID {
+					r.log.Info(
+						"token resource id does not match IDP resource " +
+							"id for path, redirecting for authorization",
+					)
+
+					if noAuthz {
+						r.StoreAuthz(
+							user.rawToken,
+							req.URL,
+							DeniedAuthz,
+							time.Until(user.expiresAt),
+						)
+					}
+					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
+					return
+				}
+
+				inter := make([]bool, 0)
+				permScopes := make(map[string]bool)
+
+				for _, scope := range *resources[0].ResourceScopes {
+					permScopes[*scope.Name] = true
+				}
+
+				for _, scope := range user.permissions.Permissions[0].Scopes {
+					if permScopes[scope] {
+						inter = append(inter, true)
+					}
+				}
+
+				if len(inter) == 0 {
+					r.log.Info(
+						"token scopes does not match with IDP " +
+							"resource scopes, redirecting for authorization",
+					)
+
+					if noAuthz {
+						r.StoreAuthz(
+							user.rawToken,
+							req.URL,
+							DeniedAuthz,
+							time.Until(user.expiresAt),
+						)
+					}
+					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
+					return
+				}
 			}
 
+			if noAuthz {
+				r.StoreAuthz(
+					user.rawToken,
+					req.URL,
+					AllowedAuthz,
+					time.Until(user.expiresAt),
+				)
+			}
 			next.ServeHTTP(w, req)
 		})
 	}
