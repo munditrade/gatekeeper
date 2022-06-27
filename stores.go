@@ -21,28 +21,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
+
 	"go.uber.org/zap"
 )
-
-type AuthzDecision int
-
-const (
-	UndefinedAuthz AuthzDecision = iota
-	AllowedAuthz   AuthzDecision = iota
-	DeniedAuthz    AuthzDecision = iota
-)
-
-func (decision AuthzDecision) String() string {
-	switch decision {
-	case AllowedAuthz:
-		return strconv.Itoa(int(AllowedAuthz))
-	case DeniedAuthz:
-		return strconv.Itoa(int(DeniedAuthz))
-	case UndefinedAuthz:
-		return ""
-	}
-	return strconv.Itoa(int(DeniedAuthz))
-}
 
 // createStorage creates the store client for use
 func createStorage(location string) (storage, error) {
@@ -102,7 +84,8 @@ func (r *oauthProxy) DeleteRefreshToken(token string) error {
 }
 
 // StoreAuthz
-func (r *oauthProxy) StoreAuthz(token string, url *url.URL, value AuthzDecision, expiration time.Duration) error {
+// nolint:interfacer
+func (r *oauthProxy) StoreAuthz(token string, url *url.URL, value authorization.AuthzDecision, expiration time.Duration) error {
 	if len(token) == 0 {
 		return fmt.Errorf("token of zero length")
 	}
@@ -114,9 +97,9 @@ func (r *oauthProxy) StoreAuthz(token string, url *url.URL, value AuthzDecision,
 }
 
 // Get retrieves a authz decision from store
-func (r *oauthProxy) GetAuthz(token string, url *url.URL) (AuthzDecision, error) {
+func (r *oauthProxy) GetAuthz(token string, url *url.URL) (authorization.AuthzDecision, error) {
 	if len(token) == 0 {
-		return UndefinedAuthz, ErrZeroLengthToken
+		return authorization.UndefinedAuthz, ErrZeroLengthToken
 	}
 
 	tokenHash := getHashKey(token)
@@ -126,26 +109,26 @@ func (r *oauthProxy) GetAuthz(token string, url *url.URL) (AuthzDecision, error)
 	exists, err := r.store.Exists(hash)
 
 	if err != nil {
-		return UndefinedAuthz, err
+		return authorization.UndefinedAuthz, err
 	}
 
 	if !exists {
-		return UndefinedAuthz, ErrNoAuthzFound
+		return authorization.UndefinedAuthz, ErrNoAuthzFound
 	}
 
 	val, err := r.store.Get(hash)
 
 	if err != nil {
-		return UndefinedAuthz, err
+		return authorization.UndefinedAuthz, err
 	}
 
 	decision, err := strconv.Atoi(val)
 
 	if err != nil {
-		return UndefinedAuthz, err
+		return authorization.UndefinedAuthz, err
 	}
 
-	return AuthzDecision(decision), nil
+	return authorization.AuthzDecision(decision), nil
 }
 
 // Close is used to close off any resources

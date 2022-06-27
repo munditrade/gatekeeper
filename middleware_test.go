@@ -30,6 +30,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	resty "github.com/go-resty/resty/v2"
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/rs/cors"
 	"github.com/stretchr/testify/assert"
 
@@ -1984,6 +1985,7 @@ func TestEnableUma(t *testing.T) {
 	}
 }
 
+// nolint:funlen
 func TestEnableUmaWithCache(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 
@@ -1993,7 +1995,7 @@ func TestEnableUmaWithCache(t *testing.T) {
 		ProxySettings        func(c *Config)
 		ExecutionSettings    []fakeRequest
 		ExpectedCacheEntries int
-		ExpectedCacheValues  AuthzDecision
+		ExpectedCacheValues  authorization.AuthzDecision
 	}{
 		{
 			Name: "TestUmaTokenWithoutAuthzWithDifferentTokens",
@@ -2061,7 +2063,7 @@ func TestEnableUmaWithCache(t *testing.T) {
 				},
 			},
 			ExpectedCacheEntries: 2,
-			ExpectedCacheValues:  DeniedAuthz,
+			ExpectedCacheValues:  authorization.DeniedAuthz,
 		},
 		{
 			Name: "TestUmaOKWithDifferentTokens",
@@ -2121,7 +2123,7 @@ func TestEnableUmaWithCache(t *testing.T) {
 				},
 			},
 			ExpectedCacheEntries: 2,
-			ExpectedCacheValues:  AllowedAuthz,
+			ExpectedCacheValues:  authorization.AllowedAuthz,
 		},
 		{
 			Name: "TestUmaOKWithSameTokens",
@@ -2185,7 +2187,7 @@ func TestEnableUmaWithCache(t *testing.T) {
 				},
 			},
 			ExpectedCacheEntries: 1,
-			ExpectedCacheValues:  AllowedAuthz,
+			ExpectedCacheValues:  authorization.AllowedAuthz,
 		},
 		{
 			Name: "TestUmaTokenWithoutAuthzWithSameTokens",
@@ -2250,7 +2252,7 @@ func TestEnableUmaWithCache(t *testing.T) {
 				},
 			},
 			ExpectedCacheEntries: 1,
-			ExpectedCacheValues:  DeniedAuthz,
+			ExpectedCacheValues:  authorization.DeniedAuthz,
 		},
 		{
 			Name: "TestUmaOneOKOneWithoutPermissionToken",
@@ -2346,7 +2348,7 @@ func TestEnableUmaWithCache(t *testing.T) {
 					)
 				}
 
-				if testCase.ExpectedCacheValues != UndefinedAuthz {
+				if testCase.ExpectedCacheValues != authorization.UndefinedAuthz {
 					for _, val := range result.Val() {
 						result := fProxy.proxy.store.(redisStore).client.Get(val)
 						if result.Val() != testCase.ExpectedCacheValues.String() {

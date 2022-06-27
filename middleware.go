@@ -29,6 +29,7 @@ import (
 
 	"github.com/Nerzal/gocloak/v11"
 	uuid "github.com/gofrs/uuid"
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 
 	"github.com/PuerkitoBio/purell"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
@@ -473,7 +474,7 @@ func (r *oauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					return
 				}
 
-				if decision == DeniedAuthz {
+				if decision == authorization.DeniedAuthz {
 					r.log.Info(
 						"authz denied from cache",
 					)
@@ -491,13 +492,20 @@ func (r *oauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					)
 
 					if noAuthz {
-						r.StoreAuthz(
+						err := r.StoreAuthz(
 							user.rawToken,
 							req.URL,
-							DeniedAuthz,
+							authorization.DeniedAuthz,
 							time.Until(user.expiresAt),
 						)
+
+						if err != nil {
+							r.log.Error(
+								"problem setting authz decision to store",
+							)
+						}
 					}
+
 					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
 					return
 				}
@@ -543,12 +551,18 @@ func (r *oauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					)
 
 					if noAuthz {
-						r.StoreAuthz(
+						err := r.StoreAuthz(
 							user.rawToken,
 							req.URL,
-							DeniedAuthz,
+							authorization.DeniedAuthz,
 							time.Until(user.expiresAt),
 						)
+
+						if err != nil {
+							r.log.Error(
+								"problem setting authz decision to store",
+							)
+						}
 					}
 					w.WriteHeader(http.StatusUnauthorized)
 					next.ServeHTTP(w, req.WithContext(r.revokeProxy(w, req)))
@@ -564,12 +578,18 @@ func (r *oauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					)
 
 					if noAuthz {
-						r.StoreAuthz(
+						err := r.StoreAuthz(
 							user.rawToken,
 							req.URL,
-							DeniedAuthz,
+							authorization.DeniedAuthz,
 							time.Until(user.expiresAt),
 						)
+
+						if err != nil {
+							r.log.Error(
+								"problem setting authz decision to store",
+							)
+						}
 					}
 					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
 					return
@@ -595,12 +615,18 @@ func (r *oauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					)
 
 					if noAuthz {
-						r.StoreAuthz(
+						err := r.StoreAuthz(
 							user.rawToken,
 							req.URL,
-							DeniedAuthz,
+							authorization.DeniedAuthz,
 							time.Until(user.expiresAt),
 						)
+
+						if err != nil {
+							r.log.Error(
+								"problem setting authz decision to store",
+							)
+						}
 					}
 					next.ServeHTTP(w, req.WithContext(r.redirectToAuthorization(w, req)))
 					return
@@ -608,12 +634,18 @@ func (r *oauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			}
 
 			if noAuthz {
-				r.StoreAuthz(
+				err := r.StoreAuthz(
 					user.rawToken,
 					req.URL,
-					AllowedAuthz,
+					authorization.AllowedAuthz,
 					time.Until(user.expiresAt),
 				)
+
+				if err != nil {
+					r.log.Error(
+						"problem setting authz decision to store",
+					)
+				}
 			}
 			next.ServeHTTP(w, req)
 		})

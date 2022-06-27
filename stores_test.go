@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -93,7 +94,7 @@ func TestStoreAuthz(t *testing.T) {
 					t.Fatal("Problem parsing url")
 				}
 
-				err = p.proxy.StoreAuthz(jwt, url, AllowedAuthz, 1*time.Second)
+				err = p.proxy.StoreAuthz(jwt, url, authorization.AllowedAuthz, 1*time.Second)
 
 				if err != nil && !testCase.ExpectedFailure {
 					t.Fatalf("error storing authz %v", err)
@@ -101,7 +102,7 @@ func TestStoreAuthz(t *testing.T) {
 
 				if !testCase.ExpectedFailure {
 					url.Path += "/append"
-					err = p.proxy.StoreAuthz(jwt, url, AllowedAuthz, 1*time.Second)
+					err = p.proxy.StoreAuthz(jwt, url, authorization.AllowedAuthz, 1*time.Second)
 
 					if err != nil {
 						t.Fatalf("error storing authz %v", err)
@@ -119,7 +120,7 @@ func TestStoreAuthz(t *testing.T) {
 						t.Fatalf("problem getting value from redis")
 					}
 
-					if decision != AllowedAuthz.String() {
+					if decision != authorization.AllowedAuthz.String() {
 						t.Fatalf("bad decision stored, expected allowed, got %v", decision)
 					}
 				}
@@ -216,7 +217,7 @@ func TestGetAuthz(t *testing.T) {
 				}
 
 				if !testCase.ExpectedFailure {
-					err = p.proxy.StoreAuthz(testCase.JWT, url, AllowedAuthz, 1*time.Second)
+					err = p.proxy.StoreAuthz(testCase.JWT, url, authorization.AllowedAuthz, 1*time.Second)
 
 					if err != nil {
 						t.Fatalf("error storing authz %s", err)
@@ -230,7 +231,7 @@ func TestGetAuthz(t *testing.T) {
 						t.Fatalf("error getting authz %s", err)
 					}
 
-					if dec != UndefinedAuthz {
+					if dec != authorization.UndefinedAuthz {
 						t.Fatalf("expected undefined authz decision, got %s", dec)
 					}
 
@@ -244,7 +245,7 @@ func TestGetAuthz(t *testing.T) {
 				}
 
 				if !testCase.ExpectedFailure {
-					if dec != AllowedAuthz {
+					if dec != authorization.AllowedAuthz {
 						t.Fatalf("bad decision stored, expected allowed, got %s", dec)
 					}
 				}
