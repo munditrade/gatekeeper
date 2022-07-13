@@ -340,6 +340,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 	if !r.EnableForwarding {
 		validationRegistry := []func() error{
 			r.isUpstreamValid,
+			r.isDefaultDenyValid,
 			r.isEnableUmaValid,
 			r.isTokenVerificationSettingsValid,
 			r.isResourceValid,
@@ -566,6 +567,15 @@ func (r *Config) isEnableUmaValid() error {
 				"enable-uma requires no-redirects option",
 			)
 		}
+	}
+	return nil
+}
+
+func (r *Config) isDefaultDenyValid() error {
+	if r.EnableDefaultDeny && r.EnableDefaultDenyStrict {
+		return errors.New(
+			"only one of enable-default-deny/enable-default-deny-strict can be true",
+		)
 	}
 	return nil
 }

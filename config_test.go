@@ -1937,3 +1937,59 @@ func TestUpdateRealm(t *testing.T) {
 		)
 	}
 }
+
+func TestDefaultDenyValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidDefaultDeny",
+			Config: &Config{
+				EnableDefaultDeny: true,
+				ClientID:          "test",
+				ClientSecret:      "test",
+				NoRedirects:       true,
+			},
+			Valid: true,
+		},
+		{
+			Name: "ValidDefaultDenyStrict",
+			Config: &Config{
+				EnableDefaultDenyStrict: true,
+				ClientID:                "test",
+				ClientSecret:            "test",
+				NoRedirects:             true,
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidDefaultDeny",
+			Config: &Config{
+				EnableDefaultDenyStrict: true,
+				EnableDefaultDeny:       true,
+				ClientID:                "test",
+				ClientSecret:            "test",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isDefaultDenyValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}

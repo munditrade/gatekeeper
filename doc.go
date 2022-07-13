@@ -207,8 +207,10 @@ type Config struct {
 	EnableRequestID bool `json:"enable-request-id" yaml:"enable-request-id" usage:"indicates we should add a request id if none found" env:"ENABLE_REQUEST_ID"`
 	// EnableLogoutRedirect indicates we should redirect to the identity provider for logging out
 	EnableLogoutRedirect bool `json:"enable-logout-redirect" yaml:"enable-logout-redirect" usage:"indicates we should redirect to the identity provider for logging out" env:"ENABLE_LOGOUT_REDIRECT"`
-	// EnableDefaultDeny indicates we should deny by default all requests
-	EnableDefaultDeny bool `json:"enable-default-deny" yaml:"enable-default-deny" usage:"enables a default denial on all requests, you have to explicitly say what is permitted (recommended)" env:"ENABLE_DEFAULT_DENY"`
+	// EnableDefaultDeny indicates we should deny by default all unauthenticated requests
+	EnableDefaultDeny bool `json:"enable-default-deny" yaml:"enable-default-deny" usage:"enables a default denial on all unauthenticated requests, you have to explicitly say what is permitted, although be aware that it allows any valid token" env:"ENABLE_DEFAULT_DENY"`
+	// EnableDefaultDenyStrict indicates we should deny by default all requests
+	EnableDefaultDenyStrict bool `json:"enable-default-deny-strict" yaml:"enable-default-deny-strict" usage:"enables a default denial on all requests, even valid token is denied unless you create some resources" env:"ENABLE_DEFAULT_DENY_STRICT"`
 	// EnableEncryptedToken indicates the access token should be encoded
 	EnableEncryptedToken bool `json:"enable-encrypted-token" yaml:"enable-encrypted-token" usage:"enable encryption for the access tokens" env:"ENABLE_ENCRYPTED_TOKEN"`
 	// ForceEncryptedCookie indicates that the access token in the cookie should be encoded, regardless what EnableEncryptedToken says. This way, Louketo Proxy may receive tokens in header in the clear, whereas tokens in cookies remain encrypted

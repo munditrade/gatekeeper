@@ -912,6 +912,20 @@ func TestDiscoveryURL(t *testing.T) {
 			},
 		},
 		{
+			Name: "TestWithDefaultDenyStrictDiscoveryOK",
+			ProxySettings: func(c *Config) {
+				c.EnableDefaultDenyStrict = true
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:                     "/oauth/discovery",
+					ExpectedProxy:           false,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: "login_endpoint",
+				},
+			},
+		},
+		{
 			Name: "TestEndpointPathCorrectWithDefaultDenyDiscoveryOK",
 			ProxySettings: func(c *Config) {
 				c.EnableDefaultDeny = true

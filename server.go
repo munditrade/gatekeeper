@@ -85,6 +85,8 @@ func init() {
 	prometheus.MustRegister(statusMetric)
 }
 
+const allPath = "/*"
+
 // newProxy create's a new proxy from configuration
 func newProxy(config *Config) (*oauthProxy, error) {
 	// create the service logger
@@ -209,7 +211,7 @@ func createLogger(config *Config) (*zap.Logger, error) {
 func (r *oauthProxy) useDefaultStack(engine chi.Router) {
 	engine.NotFound(emptyHandler)
 
-	if r.config.EnableDefaultDeny {
+	if r.config.EnableDefaultDeny || r.config.EnableDefaultDenyStrict {
 		engine.Use(r.methodCheckMiddleware)
 	} else {
 		engine.MethodNotAllowed(emptyHandler)
@@ -372,6 +374,7 @@ func (r *oauthProxy) createReverseProxy() error {
 
 	// step: provision in the protected resources
 	enableDefaultDeny := r.config.EnableDefaultDeny
+	enableDefaultDenyStrict := r.config.EnableDefaultDenyStrict
 
 	for _, x := range r.config.Resources {
 		if x.URL[len(x.URL)-1:] == "/" {
@@ -381,22 +384,23 @@ func (r *oauthProxy) createReverseProxy() error {
 				zap.String("amended", strings.TrimRight(x.URL, "/")))
 		}
 
-		if x.URL == "/*" && r.config.EnableDefaultDeny {
+		if x.URL == allPath && (r.config.EnableDefaultDeny || r.config.EnableDefaultDenyStrict) {
 			switch x.WhiteListed {
 			case true:
 				return errors.New("you've asked for a default denial but whitelisted everything")
 			default:
 				enableDefaultDeny = false
+				enableDefaultDenyStrict = false
 			}
 		}
 	}
 
-	if enableDefaultDeny {
+	if enableDefaultDeny || enableDefaultDenyStrict {
 		r.log.Info("adding a default denial into the protected resources")
 
 		r.config.Resources = append(
 			r.config.Resources,
-			&Resource{URL: "/*", Methods: allHTTPMethods},
+			&Resource{URL: allPath, Methods: allHTTPMethods},
 		)
 	}
 
@@ -410,6 +414,13 @@ func (r *oauthProxy) createReverseProxy() error {
 			r.authenticationMiddleware(),
 			r.admissionMiddleware(x),
 			r.identityHeadersMiddleware(r.config.AddClaims),
+		}
+
+		if x.URL == allPath && !x.WhiteListed && enableDefaultDenyStrict {
+			middlewares = []func(http.Handler) http.Handler{
+				r.denyMiddleware,
+				proxyDenyMiddleware,
+			}
 		}
 
 		if r.config.EnableUma {

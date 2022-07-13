@@ -813,3 +813,13 @@ func proxyDenyMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, req.WithContext(ctx))
 	})
 }
+
+// deny middleware
+func (r *oauthProxy) denyMiddleware(next http.Handler) http.Handler {
+	r.log.Info("enabling the deny middleware")
+
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		next.ServeHTTP(w, req)
+	})
+}
