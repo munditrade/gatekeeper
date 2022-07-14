@@ -68,6 +68,7 @@ func newDefaultConfig() *Config {
 		SkipOpenIDProviderTLSVerify:   false,
 		SkipUpstreamTLSVerify:         true,
 		Tags:                          make(map[string]string),
+		TLSMinVersion:                 "tlsv1.3",
 		UpstreamExpectContinueTimeout: 10 * time.Second,
 		UpstreamKeepaliveTimeout:      10 * time.Second,
 		UpstreamKeepalives:            true,
@@ -288,6 +289,7 @@ func (r *Config) isLetsEncryptValid() error {
 func (r *Config) isTLSMinValid() error {
 	switch strings.ToLower(r.TLSMinVersion) {
 	case "":
+		return fmt.Errorf("minimal TLS version should not be empty")
 	// nolint: goconst
 	case "tlsv1.0":
 	// nolint: goconst
